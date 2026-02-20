@@ -2,7 +2,7 @@
 
 ## 概述
 
-本指南介绍如何在 [Dokploy](https://dokploy.com) 上部署 Mem0 Server。
+本指南介绍如何在 [Dokploy](https://dokploy.com) 上通过 **连接 GitHub 仓库、本地构建镜像** 的方式部署 Mem0 Server。
 
 Mem0 Server 由三个服务组成：
 
@@ -19,21 +19,36 @@ Mem0 Server 由三个服务组成：
 - 已安装并运行 Dokploy（自托管版本）
 - 服务器已安装 Docker
 - 拥有硅基流动（或其他 OpenAI 兼容接口）的 API Key
+- GitHub 仓库已包含本项目代码（当前分支：`dokploy`）
 
 ---
 
-## 步骤一：准备 Docker Compose 配置
+## 步骤一：在 Dokploy 中创建项目并连接 GitHub
 
-在 Dokploy 控制台中使用以下 `docker-compose.yml` 内容（生产版本，去除了开发模式的热重载挂载）：
+1. 登录 Dokploy 控制台，点击 **Create Project**，填写项目名称（如 `mem0`）
+2. 在项目内点击 **Create Service** → 选择 **Docker Compose**
+3. 在 **Source** 面板中选择 **GitHub**：
+   - 点击 **Connect GitHub**，完成 OAuth 授权
+   - 选择仓库（如 `jhezjkp/mem0`）
+   - **Branch** 填写 `dokploy`
+   - **Compose Path** 填写 `server/docker-compose.prod.yml`
+
+> Dokploy 会将仓库克隆到服务器本地，然后以仓库根目录为工作目录执行 docker-compose。
+
+---
+
+## 步骤二：准备生产版 Docker Compose 文件
+
+在仓库中创建 `server/docker-compose.prod.yml`，内容如下（使用 `build:` 从源码本地构建镜像，而非拉取远程镜像）：
 
 ```yaml
 name: mem0
 
 services:
   mem0:
-    image: ghcr.io/mem0ai/mem0-server:latest  # 或者填写你自己构建并推送的镜像地址
-    # build:                                   # 如果使用源码构建，取消注释以下两行
-    #   dockerfile: server/Dockerfile
+    build:
+      context: ./server        # 构建上下文为仓库根目录下的 server/ 目录
+      dockerfile: Dockerfile   # 对应 server/Dockerfile
     ports:
       - "8000:8000"
     networks:
@@ -111,20 +126,7 @@ networks:
     driver: bridge
 ```
 
-> **注意：** 与开发版相比，生产配置做了以下调整：
-> - 移除了 mem0 库源码和 server 代码的热重载挂载
-> - 历史数据库改为命名卷 `history_data`（持久化更可靠）
-> - neo4j 健康检查间隔适当放宽，避免频繁检查
-
----
-
-## 步骤二：在 Dokploy 中创建项目
-
-1. 登录 Dokploy 控制台
-2. 点击 **Create Project**，填写项目名称（如 `mem0`）
-3. 在项目内点击 **Create Service** → 选择 **Docker Compose**
-4. **Source** 选项中选择 **Raw**，将上方的 `docker-compose.yml` 内容粘贴进去
-5. 点击 **Save**
+将此文件提交并推送到远程仓库后，Dokploy 才能读取到它。
 
 ---
 
@@ -151,7 +153,7 @@ networks:
 | `POSTGRES_PASSWORD` | `postgres` | PostgreSQL 密码（建议修改） |
 | `NEO4J_PASSWORD` | `mem0graph` | Neo4j 密码（建议修改） |
 
-> **安全建议：** 生产环境中务必修改 `POSTGRES_PASSWORD` 和 `NEO4J_PASSWORD`，确保两处（服务定义和 `NEO4J_AUTH`）保持一致。
+> **安全建议：** 生产环境中务必修改 `POSTGRES_PASSWORD` 和 `NEO4J_PASSWORD`。
 
 ---
 
@@ -159,30 +161,53 @@ networks:
 
 1. 在 Dokploy 服务的 **Domains** 面板中点击 **Add Domain**
 2. 填写域名（如 `mem0.example.com`）
-3. **Container Port** 填写 `8000`
+3. **Container Port** 填写 `8000`、**Service Name** 填写 `mem0`
 4. 开启 **HTTPS**，选择 Let's Encrypt 自动签发证书
 5. 保存后，Dokploy 会自动通过 Traefik 完成反向代理配置
 
 ---
 
-## 步骤五：部署
+## 步骤五：首次部署
 
-1. 点击 **Deploy** 按钮
-2. 在 **Logs** 面板观察启动日志，注意：
-   - neo4j 首次启动需要约 60-90 秒完成初始化，mem0 服务会等待其健康检查通过后再启动
-   - 正常启动后可看到 `Uvicorn running on http://0.0.0.0:8000`
+1. 在 Dokploy 服务页面点击 **Deploy** 按钮
+2. Dokploy 会依次执行：
+   - 从 GitHub 拉取代码到服务器本地
+   - 以 `./server` 为 build context 执行 `docker build`
+   - 启动 postgres、neo4j，等待健康检查通过
+   - 启动 mem0 容器
+3. 在 **Logs** 面板观察日志，neo4j 首次启动需约 60-90 秒，正常完成后可见：
+   ```
+   Uvicorn running on http://0.0.0.0:8000
+   ```
 
 ---
 
-## 步骤六：验证部署
+## 步骤六：配置自动部署（推送触发）
 
-服务启动后，访问以下地址验证：
+每次向 `dokploy` 分支推送代码后，让 Dokploy 自动拉取并重新构建：
 
-```
-# OpenAPI 文档
-https://mem0.example.com/docs
+1. 在 Dokploy 服务的 **General** 面板中，找到 **Webhook URL**，复制该地址
+2. 打开 GitHub 仓库 → **Settings** → **Webhooks** → **Add webhook**
+3. **Payload URL** 粘贴刚才复制的地址
+4. **Content type** 选择 `application/json`
+5. **Which events** 选择 `Just the push event`
+6. 勾选 **Active**，点击 **Add webhook**
 
-# 健康探测（创建一条测试记忆）
+此后每次 `git push origin dokploy`，Dokploy 都会自动触发重新拉取代码、重新构建镜像并重启服务。
+
+### 手动触发更新
+
+如果不使用 Webhook，也可在有新代码后在 Dokploy 控制台手动点击 **Deploy** 触发。
+
+---
+
+## 步骤七：验证部署
+
+```bash
+# 访问 OpenAPI 文档
+open https://mem0.example.com/docs
+
+# 创建一条测试记忆
 curl -X POST https://mem0.example.com/memories \
   -H "Content-Type: application/json" \
   -d '{
@@ -213,7 +238,7 @@ neo4j 启动较慢，`depends_on` 的健康检查会等待它就绪。如果仍�
 
 **Q: 如何切换回 OpenAI 官方接口？**
 
-将环境变量设置为：
+在 Dokploy Environment 面板中将以下变量改为：
 
 ```
 OPENAI_BASE_URL=https://api.openai.com/v1
@@ -224,4 +249,4 @@ EMBEDDING_DIMS=1536
 
 **Q: 如何查看 Neo4j 浏览器界面？**
 
-Neo4j 浏览器运行在容器内部 7474 端口，生产环境不建议直接暴露。如有需要，可在 Dokploy 中为 neo4j 服务单独添加一个域名，Container Port 填 `7474`。
+Neo4j 浏览器运行在容器内部 7474 端口，生产环境不建议直接暴露。如有需要，可在 Dokploy 中为 neo4j 服务单独添加一个域名，Container Port 填 `7474`、Service Name 填 `neo4j`。
