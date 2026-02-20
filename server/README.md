@@ -15,3 +15,7 @@ Mem0 provides a REST API server (written using FastAPI). Users can perform all o
 ## Running the server
 
 Follow the instructions in the [docs](https://docs.mem0.ai/open-source/features/rest-api) to run the server.
+
+## Deployment
+
+- [Dokploy 部署指南](./DEPLOY_DOKPLOY.md)
