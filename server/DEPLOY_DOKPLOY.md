@@ -138,6 +138,7 @@ networks:
 
 | 变量 | 说明 |
 |------|------|
+| `API_KEY` | 接口认证密钥，所有请求必须携带，建议使用随机长字符串 |
 | `OPENAI_API_KEY` | 硅基流动或其他服务的 API Key |
 
 ### 可选（有默认值）
@@ -153,7 +154,21 @@ networks:
 | `POSTGRES_PASSWORD` | `postgres` | PostgreSQL 密码（建议修改） |
 | `NEO4J_PASSWORD` | `mem0graph` | Neo4j 密码（建议修改） |
 
-> **安全建议：** 生产环境中务必修改 `POSTGRES_PASSWORD` 和 `NEO4J_PASSWORD`。
+> **安全建议：** 生产环境中务必设置 `API_KEY`，并修改 `POSTGRES_PASSWORD` 和 `NEO4J_PASSWORD`。
+
+### API Key 使用方式
+
+客户端请求时二选一：
+
+```
+# 方式一：标准 Header
+X-API-Key: <your-key>
+
+# 方式二：兼容 mem0ai / OpenClaw 客户端
+Authorization: Token <your-key>
+```
+
+未提供或错误的 Key 返回 **401**，并在服务日志中记录客户端 IP、请求方法、路径及 Headers。
 
 ---
 
