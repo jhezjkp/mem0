@@ -47,7 +47,7 @@ name: mem0
 services:
   mem0:
     build:
-      context: ./server        # 构建上下文为仓库根目录下的 server/ 目录
+      context: .               # Dokploy 以 compose 文件所在目录(server/)为工作目录，context 用 . 即可
       dockerfile: Dockerfile   # 对应 server/Dockerfile
     ports:
       - "8000:8000"
