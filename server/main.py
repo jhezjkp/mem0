@@ -3,8 +3,9 @@ import os
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Security
 from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel, Field
 
 from mem0 import Memory
@@ -29,6 +30,8 @@ NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "mem0graph")
 MEMGRAPH_URI = os.environ.get("MEMGRAPH_URI", "bolt://localhost:7687")
 MEMGRAPH_USERNAME = os.environ.get("MEMGRAPH_USERNAME", "memgraph")
 MEMGRAPH_PASSWORD = os.environ.get("MEMGRAPH_PASSWORD", "mem0graph")
+
+API_KEY = os.environ.get("API_KEY")
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.siliconflow.cn/v1")
@@ -81,10 +84,35 @@ DEFAULT_CONFIG = {
 
 MEMORY_INSTANCE = Memory.from_config(DEFAULT_CONFIG)
 
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def verify_api_key(
+    request: Request,
+    x_api_key: Optional[str] = Security(_api_key_header),
+    authorization: Optional[str] = Header(default=None),
+) -> None:
+    """Validate API key. Accepts X-API-Key header or Authorization: Token <key>."""
+    candidates = [x_api_key]
+    if authorization and authorization.startswith("Token "):
+        candidates.append(authorization[len("Token "):])
+    if not any(c == API_KEY for c in candidates if c):
+        client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+        logging.warning(
+            "Unauthorized request - IP: %s | Method: %s | Path: %s | Headers: %s",
+            client_ip,
+            request.method,
+            request.url.path,
+            dict(request.headers),
+        )
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+
 app = FastAPI(
     title="Mem0 REST APIs",
     description="A REST API for managing and searching memories for your AI Agents and Apps.",
     version="1.0.0",
+    dependencies=[Depends(verify_api_key)],
 )
 
 
