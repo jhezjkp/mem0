@@ -9,6 +9,7 @@ services:
       - "8000:8000"
     networks:
       - mem0_network
+      - dokploy-network
     volumes:
       - history_data:/app/history
     depends_on:
@@ -80,3 +81,5 @@ volumes:
 networks:
   mem0_network:
     driver: bridge
+  dokploy-network:
+    external: true
