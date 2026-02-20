@@ -148,7 +148,7 @@ networks:
 | `OPENAI_BASE_URL` | `https://api.siliconflow.cn/v1` | LLM/Embedding API 地址 |
 | `LLM_MODEL` | `Qwen/Qwen2.5-72B-Instruct` | 使用的 LLM 模型 |
 | `LLM_TEMPERATURE` | `0.2` | 生成温度 |
-| `LLM_MAX_TOKENS` | `2000` | 最大输出 Token 数 |
+| `LLM_MAX_TOKENS` | `4096` | 最大输出 Token 数（图谱实体提取需要输出较长 JSON，建议不低于 4096，否则截断会导致 JSON 解析错误） |
 | `EMBEDDING_MODEL` | `BAAI/bge-m3` | Embedding 模型 |
 | `EMBEDDING_DIMS` | `1024` | 向量维度 |
 | `POSTGRES_PASSWORD` | `postgres` | PostgreSQL 密码（建议修改） |
